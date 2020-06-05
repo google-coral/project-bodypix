@@ -5,10 +5,16 @@ body-part segmentation. This has previously been released as a
 [Tensorflow.Js](https://blog.tensorflow.org/2019/11/updated-bodypix-2.html)
 project.
 
-This repo contains a set of BodyPix Models (both with MobileNet v1 and ResNet
-50 backbones) that are quantized and optimized for the Coral Edge TPU.
-Example code is provided to enable generic platforms as well as an optimized
-version for the Coral Dev Board.
+This repo contains a set of pre-trained BodyPix Models (with both MobileNet v1
+and ResNet50 backbones) that are quantized and optimized for the Coral Edge
+ TPU. Example code is provided to enable inferencing on generic platforms as
+ well as an optimized version for the Coral Dev Board.
+
+![Video of Body-Part Segmentation on Coral Dev Board](media/segmentation.gif)
+![Video of Anonymous Population Flow on Coral Dev Board](media/flow.gif)
+
+*The above images show body-part segmentation (on an [example video](https://github.com/intel-iot-devkit/sample-videos/blob/master/head-pose-face-detection-female-and-male.mp4))
+ and anonymous population flow, both running on the Coral Dev board.*
 
 ## What is Person/Body-Part Segmentation?
 
