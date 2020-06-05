@@ -10,11 +10,14 @@ and ResNet50 backbones) that are quantized and optimized for the Coral Edge
  TPU. Example code is provided to enable inferencing on generic platforms as
  well as an optimized version for the Coral Dev Board.
 
-![Video of Body-Part Segmentation on Coral Dev Board](media/segmentation.gif)
-![Video of Anonymous Population Flow on Coral Dev Board](media/flow.gif)
+Body-Part Segmentation | Anonymous Population Flow
+:-------------------------:|:-------------------------:
+![](media/segmentation.gif) | ![](media/flow.gif)
 
-*The above images show body-part segmentation (on an [example video](https://github.com/intel-iot-devkit/sample-videos/blob/master/head-pose-face-detection-female-and-male.mp4))
- and anonymous population flow, both running on the Coral Dev board.*
+*The above images show two possible applications of BodyPix. The left shows body-part
+ segmentation (on an [example video](https://github.com/intel-iot-devkit/sample-videos/blob/master/head-pose-face-detection-female-and-male.mp4)) with bounding boxes and PoseNet-style skeletons. The right
+ shows anonymous population flow. Both are running on the Coral Dev Board; see below for
+ information on enabling these modes on the Dev Board or on a generic platform.*
 
 ## What is Person/Body-Part Segmentation?
 
