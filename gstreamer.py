@@ -64,14 +64,15 @@ def on_new_sample(sink, appsrc, overlay, screen_size, appsink_size,
     return Gst.FlowReturn.OK
 
 
-def detectCoralDevBoard():
-    try:
-        if 'MX8MQ' in open('/sys/firmware/devicetree/base/model').read():
-            print('Detected Edge TPU dev board.')
-            return True
-    except:
-        pass
-    return False
+def get_dev_board_model():
+  try:
+    model = open('/sys/firmware/devicetree/base/model').read().lower()
+    if 'mx8mq' in model:
+        return 'mx8mq'
+    if 'mt8167' in model:
+        return 'mt8167'
+  except: pass
+  return None
 
 
 def run_pipeline(user_function,
@@ -90,17 +91,21 @@ def run_pipeline(user_function,
         SRC_CAPS = 'video/x-raw,width={width},height={height},framerate=30/1'
 
     APPSRC_PIPELINE = 'appsrc name=appsrc ! {appsrc_caps} '
-    if detectCoralDevBoard():
-      print("***\nNOTE: On a Coral devboard use bodypix_gl_imx.py instead for much faster performance.\n***")
-      scale_caps = None
-      PIPELINE += """
-         ! decodebin ! glupload ! glvideoflip video-direction={direction} ! {leaky_q}
-         ! glfilterbin filter=glbox name=glbox ! {sink_caps} ! {sink_element}
-      """
-      APPSRC_PIPELINE += """
-         ! {leaky_q} ! videoconvert n-threads=4
-         ! rsvgoverlay name=overlay ! waylandsink
-      """
+    coral = get_dev_board_model()
+    if coral:
+        print("***\nNOTE: On a Coral devboard use bodypix_gl_imx.py instead for much faster performance.\n***")
+        if 'mx8mq' in coral:
+            scale_caps = None
+            PIPELINE += """
+               ! decodebin ! glupload ! glvideoflip video-direction={direction} ! {leaky_q}
+               ! glfilterbin filter=glbox name=glbox ! {sink_caps} ! {sink_element}
+            """
+            APPSRC_PIPELINE += """
+               ! {leaky_q} ! videoconvert n-threads=4
+               ! rsvgoverlay name=overlay ! waylandsink
+            """
+        elif 'mt8167' in coral:
+            print('Not implemented')
     else:  # raspberry pi or linux
       scale = min(appsink_size[0] / src_size[0], appsink_size[1] / src_size[1])
       scale = tuple(int(x * scale) for x in src_size)

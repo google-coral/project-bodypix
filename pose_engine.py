@@ -14,15 +14,22 @@
 
 import collections
 import math
+import os
+import time
 
 import numpy as np
-from pkg_resources import parse_version
-from edgetpu import __version__ as edgetpu_version
-assert parse_version(edgetpu_version) >= parse_version('2.11.1'), \
-        'This demo requires Edge TPU version >= 2.11.1'
 
-from edgetpu.basic.basic_engine import BasicEngine
 from PIL import Image
+
+from tflite_runtime.interpreter import load_delegate
+from tflite_runtime.interpreter import Interpreter
+
+from pycoral.adapters.common import output_tensor
+from pycoral.utils.edgetpu import run_inference
+
+EDGETPU_SHARED_LIB = 'libedgetpu.so.1'
+POSENET_SHARED_LIB = os.path.join(
+    'posenet_lib', os.uname().machine, 'posenet_decoder.so')
 
 EDGES = (
     ('nose', 'left eye'),
@@ -117,7 +124,7 @@ class Pose:
         return 'Pose({}, {})'.format(self.keypoints, self.score)
 
 
-class PoseEngine(BasicEngine):
+class PoseEngine:
     """Engine used for pose tasks."""
 
     def __init__(self, model_path, mirror=False):
@@ -130,38 +137,40 @@ class PoseEngine(BasicEngine):
         Raises:
           ValueError: An error occurred when model output is invalid.
         """
-        BasicEngine.__init__(self, model_path)
         self._mirror = mirror
 
-        self._input_tensor_shape = self.get_input_tensor_shape()
+        edgetpu_delegate = load_delegate(EDGETPU_SHARED_LIB)
+        posenet_decoder_delegate = load_delegate(POSENET_SHARED_LIB)
+        self._interpreter = Interpreter(
+            model_path, experimental_delegates=[edgetpu_delegate, posenet_decoder_delegate])
+        self._interpreter.allocate_tensors()
+        self._input_tensor_shape = self._interpreter.get_input_details()[0]['shape']
         if (self._input_tensor_shape.size != 4 or
                 self._input_tensor_shape[3] != 3 or
                 self._input_tensor_shape[0] != 1):
             raise ValueError(
                 ('Image model should have input shape [1, height, width, 3]!'
                  ' This model has {}.'.format(self._input_tensor_shape)))
-        _, self.image_height, self.image_width, self.image_depth = self.get_input_tensor_shape()
+        _, self.image_height, self.image_width, self.image_depth = self._input_tensor_shape
 
-        # The API returns all the output tensors flattened and concatenated. We
-        # have to figure out the boundaries from the tensor shapes & sizes.
-        offset = 0
-        self._output_offsets = [0]
-        for size in self.get_all_output_tensors_sizes():
-            offset += int(size)
-            self._output_offsets.append(offset)
 
         # Auto-detect stride size
         def calcStride(h,w,L):
           return int((2*h*w)/(math.sqrt(h**2 + 4*h*L*w - 2*h*w + w**2) - h - w))
 
-        heatmap_size = self.get_output_tensor_size(4)
+        details = self._interpreter.get_output_details()[4]
+        self.heatmap_zero_point = details['quantization_parameters']['zero_points'][0]
+        self.heatmap_scale = details['quantization_parameters']['scales'][0]
+        heatmap_size = self._interpreter.tensor(details['index'])().nbytes
         self.stride = calcStride(self.image_height, self.image_width, heatmap_size)
         self.heatmap_size = (self.image_width // self.stride + 1, self.image_height // self.stride + 1)
+        details = self._interpreter.get_output_details()[5]
+        self.parts_zero_point = details['quantization_parameters']['zero_points'][0]
+        self.parts_scale = details['quantization_parameters']['scales'][0]
+
         print("Heatmap size: ", self.heatmap_size)
         print("Stride: ", self.stride, self.heatmap_size)
 
-    def _zip_output(self, output):
-        return [output[i:j] for i, j in zip(self._output_offsets, self._output_offsets[1:])]
 
     def DetectPosesInImage(self, img):
         """Detects poses in a given image.
@@ -183,8 +192,7 @@ class PoseEngine(BasicEngine):
         assert (img.shape == tuple(self._input_tensor_shape[1:]))
 
         # Run the inference (API expects the data to be flattened)
-        inference_time, output = self.run_inference(img.flatten())
-        outputs = self._zip_output(output)
+        inference_time, outputs = self.run_inference(img.flatten())
         poses = self._parse_poses(outputs)
         heatmap, bodyparts = self._parse_heatmaps(outputs)
         return inference_time, poses, heatmap, bodyparts
@@ -196,7 +204,6 @@ class PoseEngine(BasicEngine):
         return inference_time, poses, heatmap, bodyparts
 
     def ParseOutputs(self, outputs):
-        outputs = self._zip_output(outputs)
         poses = self._parse_poses(outputs)
         heatmap, bodyparts = self._parse_heatmaps(outputs)
         return poses, heatmap, bodyparts
@@ -206,7 +213,6 @@ class PoseEngine(BasicEngine):
         keypoint_scores = outputs[1].reshape(-1, len(KEYPOINTS))
         pose_scores = outputs[2]
         nposes = int(outputs[3][0])
-        assert nposes < outputs[0].shape[0]
 
         # Convert the poses to a friendlier format of keypoints with associated
         # scores.
@@ -228,17 +234,22 @@ class PoseEngine(BasicEngine):
         return y / np.expand_dims(np.sum(y, axis = axis), axis)
 
     def _parse_heatmaps(self, outputs):
-        if len(outputs) < 5: return None, None
-        heatmap = np.reshape(outputs[4],
-                             [self.heatmap_size[1],
-                              self.heatmap_size[0]])
-
-        # If part heatmaps tensor is not present, move on
-        if len(outputs) < 6:
-          return heatmap, None
-
-        part_heatmap = np.reshape(outputs[5],
-                             [self.heatmap_size[1],
-                              self.heatmap_size[0], -1])
+        # Heatmaps are really float32.
+        heatmap = (outputs[4].astype(np.float32) - self.heatmap_zero_point) * self.heatmap_scale
+        heatmap = np.reshape(heatmap, [self.heatmap_size[1], self.heatmap_size[0]])
+        part_heatmap = (outputs[5].astype(np.float32) - self.parts_zero_point) * self.parts_scale
+        part_heatmap = np.reshape(part_heatmap, [self.heatmap_size[1], self.heatmap_size[0], -1])
         part_heatmap = self.softmax(part_heatmap, axis=2)
         return heatmap, part_heatmap
+
+    def run_inference(self, input):
+        start_time = time.monotonic()
+        run_inference(self._interpreter, input)
+        duration_ms = (time.monotonic() - start_time) * 1000
+
+        output = []
+        for details in self._interpreter.get_output_details():
+            tensor = self._interpreter.get_tensor(details['index'])
+            output.append(tensor)
+
+        return (duration_ms, output)
