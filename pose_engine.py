@@ -211,7 +211,7 @@ class PoseEngine:
     def _parse_poses(self, outputs):
         keypoints = outputs[0].reshape(-1, len(KEYPOINTS), 2)
         keypoint_scores = outputs[1].reshape(-1, len(KEYPOINTS))
-        pose_scores = outputs[2]
+        pose_scores = outputs[2].flatten()
         nposes = int(outputs[3][0])
 
         # Convert the poses to a friendlier format of keypoints with associated
