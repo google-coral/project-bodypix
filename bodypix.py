@@ -154,7 +154,7 @@ def main():
         print('Error: both mutually exclusive options h264 and jpeg set')
         sys.exit(1)
 
-    default_model = 'models/bodypix_mobilenet_v1_075_640_480_16_quant_edgetpu_decoder.tflite'
+    default_model = 'models/bodypix_mobilenet_v1_075_640_480_16_quant_decoder_edgetpu.tflite'
     model = args.model if args.model else default_model
     print('Model: {}'.format(model))
 
