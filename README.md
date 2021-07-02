@@ -74,22 +74,8 @@ trade-offs in these versions, MobileNet will be faster than ResNet but
 less accurate; larger resolutions are slower but allow a wider field of
 view (allowing further-away people to be processed correctly).
 
-This can be changed with the `--model` flag. The following models are
-provided:
-
-```bash
-models/bodypix_mobilenet_v1_075_1024_768_16_quant_edgetpu_decoder.tflite
-models/bodypix_mobilenet_v1_075_1280_720_16_quant_edgetpu_decoder.tflite
-models/bodypix_mobilenet_v1_075_480_352_16_quant_edgetpu_decoder.tflite
-models/bodypix_mobilenet_v1_075_640_480_16_quant_edgetpu_decoder.tflite
-models/bodypix_mobilenet_v1_075_768_576_16_quant_edgetpu_decoder.tflite
-models/bodypix_resnet_50_416_288_16_quant_edgetpu_decoder.tflite
-models/bodypix_resnet_50_640_480_16_quant_edgetpu_decoder.tflite
-models/bodypix_resnet_50_768_496_32_quant_edgetpu_decoder.tflite
-models/bodypix_resnet_50_864_624_32_quant_edgetpu_decoder.tflite
-models/bodypix_resnet_50_928_672_16_quant_edgetpu_decoder.tflite
-models/bodypix_resnet_50_960_736_32_quant_edgetpu_decoder.tflite
-```
+This can be changed with the `--model` flag. Both EdgeTPU and CPU models can
+be found in the `models` folder.
 
 You can change the camera resolution by using the `--width` and `--height`
 parameter. Note that in general the camera resolution should equal or exceed
